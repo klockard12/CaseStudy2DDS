@@ -57,7 +57,7 @@ ggplot(data = DDS_data) + geom_bar(aes(x = BusinessTravel, fill = Attrition), po
 ggplot(data = DDS_data) + geom_bar(aes(x= OverTime, fill = OverTime), position = "dodge") + facet_wrap(~JobRole) + ggtitle("Over Time by Job Role")
 
 ```
-Here, I created a model using kNN and a model using naive bayes to predict attrition using my top three selected identifiers for attrition (Age, JobLevel, and Over Time). Of the two models, the kNN model performed significantly better than the naive bayes model. The kNN model achieved an accuracy of .8, and specificity and sensitivities > .6 using random test and training sets.
+Here, I created a model using kNN and a model using naive bayes to predict attrition using my top three selected identifiers for attrition (Age, JobLevel, and Over Time). Of the two models, the kNN model performed significantly better than the naive bayes model. The kNN model achieved an accuracy of .8544, and specificity and sensitivities > .6 using random test and training sets.
 ```{r}
 #kNN
 #Select variables wanted to train model
@@ -70,8 +70,10 @@ DDS_Train$Z_OverTime <- scale(DDS_Train$OverTimeBinary)
 #Run loop to find best k
 set.seed(150)
 iterations = 100
-numks = 30
+numks = 40
 masterAcc = matrix(nrow = iterations, ncol = numks)
+masterSpec = matrix(nrow = iterations, ncol = numks)
+masterSens = matrix(nrow = iterations, ncol = numks)
 splitPerc = .7
 for(j in 1:iterations)
 {
@@ -89,12 +91,13 @@ for(j in 1:iterations)
   
 }
 MeanAcc = colMeans(masterAcc)
+
 #Graph of k Value vs. Accuracy
 plot(seq(1,numks,1),MeanAcc, type = "l", main = "Values of k vs. Accuracy", xlab = "Value of k")
 max(MeanAcc)
 which(MeanAcc==max(MeanAcc))
-#Found best k = 21. However,this did not produce a high enough specificity. Using k=17 to increase specificity.
-#Building complete model to find confusion matrix for  k = 17.
+
+#Found best k = 21.
 CaseStudy_Test <- DDS_Test %>% select(ID, Age, JobLevel, OverTimeBinary)
 #Standardize age, job level, and overtime
 CaseStudy_Test$Z_Age <- scale(CaseStudy_Test$Age)
@@ -107,9 +110,9 @@ train <- DDS_Train[train_index, ]
 test <- DDS_Train[-train_index, ]
 knn.model <- knn(train = train[,5:7], test = test[,5:7], cl = train$Attrition, k=21)
 table(test$Attrition,knn.model)
-#Print confusion matrix for k=17
+#Print confusion matrix for k=21
 CM = confusionMatrix(table(test$Attrition,knn.model))
-#Specificity = .75, Sensitivity = .85, Accuracy = .8429
+#Specificity = .6364, Sensitivity = .8745, Accuracy = .8544
 CM
 
 #Calculate attrition predictions for the test set!
