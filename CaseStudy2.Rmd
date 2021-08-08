@@ -1,0 +1,221 @@
+---
+title: "Case Study 2: Predicting Attrition and Salary"
+author: "Katherine Lockard"
+date: "8/6/2021"
+output: html_document
+---
+<p><a href = "https://youtu.be/PtFPW_gCeH8"> YouTube Presentation</a></p>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Introduction
+
+In this case study, we will examine employee characteristics at Frito Lay. This dataset contained 870 observations and 36 different variables. Later, we will explore predictors for employee attrition in order to create a model that will predict attrition and we will explore variables related to Monthly Income in order to create a linear regression model that estimates monthly income.
+
+First, make sure required libraries are installed. Some important ones we used are: e1071 for Naive Bayes, ggplot2 for visualization, olsrr for variable selection, caret & class were used for kNN, and visdat to visualize missing values.
+``` {r}
+#load Packages
+library(ggplot2)
+library(dplyr)
+library(visdat)
+library(tidyverse)
+library(tinytex)
+library(caret)
+library(e1071)
+library(class)
+library(olsrr)
+library(GGally)
+library(readxl)
+#Read in data files
+DDS_data <- read.csv(file = "/Users/katherinelockard/Documents/SMU/Doing Data Science/Case Study 2/CaseStudy2-data.csv")
+DDS_Test <- read.csv(file ="/Users/katherinelockard/Documents/SMU/Doing Data Science/Case Study 2/CaseStudy2Test.csv")
+```
+Next, visualize the missing data. All data is accounted for!
+```{r, fig.width=15, fig.height=5}
+#No missing data!! Woohoo
+vis_miss(DDS_data) + ggtitle("Missing Data in the Attrtition Data Set")
+```
+Next, I created different plots to visualize the relationships between each variable and attrition. The variables that were most significant were Job level, Over Time, and Age. An interesting finding is that Research Scientists and Sales Representatives had the greatest percentage of employees that work over time. Since over time is a strong predictor of attrition, it might be beneficial to find ways to keep your Research Scientists and Sales Representatives happy!
+```{r, fig.width=15, fig.height=5}
+#Visualize relationships between attrition and each variable
+ggplot(data = DDS_data) + geom_bar(aes(x = Attrition, fill = Attrition)) + ggtitle("Attrition at Frito Lay")
+ggplot(data = DDS_data) + geom_bar(aes(x = JobRole, fill = Attrition), position = "fill") + ggtitle("Attrition by Job Role")
+ggplot(data = DDS_data) + geom_bar(aes(x = OverTime, fill = Attrition), position = "fill") + ggtitle("Attrition by Over Time")
+ggplot(data = DDS_data) + geom_bar(aes(x = Department, fill = Attrition), position = "fill") + ggtitle("Attrition by Department")
+ggplot(data = DDS_data) + geom_bar(aes(x = Age, fill = Attrition), position = "fill") + ggtitle("Attrition by Age")
+ggplot(data = DDS_data) + geom_bar(aes(x = MaritalStatus, fill = Attrition), position = "fill") + ggtitle("Attrition by Marital Status")
+ggplot(data = DDS_data) + geom_bar(aes(x = JobLevel, fill = Attrition), position = "fill") + ggtitle("Attrition by Job Level")
+ggplot(data = DDS_data) + geom_bar(aes(x = Gender, fill = Attrition), position = "fill") + ggtitle("Attrition by Gender")
+ggplot(data = DDS_data) + geom_bar(aes(x = Education, fill = Attrition), position = "fill") + ggtitle("Attrition by Education")
+ggplot(data = DDS_data) + geom_bar(aes(x = EducationField, fill = Attrition), position = "fill") + ggtitle("Attrition by EducationField")
+ggplot(data = DDS_data) + geom_bar(aes(x = YearsAtCompany, fill = Attrition), position = "fill") + ggtitle("Attrition by Years At Company")
+ggplot(data = DDS_data) + geom_bar(aes(x = NumCompaniesWorked, fill = Attrition), position = "fill") + ggtitle("Attrition by NumCompaniesWorked")
+ggplot(data = DDS_data) + geom_bar(aes(x = BusinessTravel, fill = Attrition), position = "fill") + facet_wrap(~JobRole) + ggtitle("Attrition by Business Travel")
+
+#Top three variables Picked: OverTime, JobLevel, Age
+#Research Scientists work the most over time compared to other job roles
+ggplot(data = DDS_data) + geom_bar(aes(x= OverTime, fill = OverTime), position = "dodge") + facet_wrap(~JobRole) + ggtitle("Over Time by Job Role")
+
+```
+Here, I created a model using kNN and a model using naive bayes to predict attrition using my top three selected identifiers for attrition (Age, JobLevel, and Over Time). Of the two models, the kNN model performed significantly better than the naive bayes model. The kNN model achieved an accuracy of .8, and specificity and sensitivities > .6 using random test and training sets.
+```{r}
+#kNN
+#Select variables wanted to train model
+DDS_Train <- DDS_data %>% select(Age, JobLevel, OverTimeBinary, Attrition)
+#Standardize age, job level, and overtime
+DDS_Train$Z_Age <- scale(DDS_Train$Age)
+DDS_Train$Z_JobLevel <- scale(DDS_Train$JobLevel)
+DDS_Train$Z_OverTime <- scale(DDS_Train$OverTimeBinary)
+#kNN Classification
+#Run loop to find best k
+set.seed(150)
+iterations = 100
+numks = 30
+masterAcc = matrix(nrow = iterations, ncol = numks)
+splitPerc = .7
+for(j in 1:iterations)
+{
+  trainIndices = sample(1:dim(DDS_Train)[1],round(splitPerc * dim(DDS_Train)[1]))
+  train = DDS_Train[trainIndices,]
+  test = DDS_Train[-trainIndices,]
+  
+  for(i in 1:numks)
+  {
+    classifications = knn(train[,c(5:7)],test[,c(5:7)],train$Attrition, prob = TRUE, k = i)
+    table(classifications,test$Attrition)
+    CM = confusionMatrix(table(classifications,test$Attrition))
+    masterAcc[j,i] = CM$overall[1]
+  }
+  
+}
+MeanAcc = colMeans(masterAcc)
+#Graph of k Value vs. Accuracy
+plot(seq(1,numks,1),MeanAcc, type = "l", main = "Values of k vs. Accuracy", xlab = "Value of k")
+max(MeanAcc)
+which(MeanAcc==max(MeanAcc))
+#Found best k = 21. However,this did not produce a high enough specificity. Using k=17 to increase specificity.
+#Building complete model to find confusion matrix for  k = 17.
+CaseStudy_Test <- DDS_Test %>% select(ID, Age, JobLevel, OverTimeBinary)
+#Standardize age, job level, and overtime
+CaseStudy_Test$Z_Age <- scale(CaseStudy_Test$Age)
+CaseStudy_Test$Z_JobLevel <- scale(CaseStudy_Test$JobLevel)
+CaseStudy_Test$Z_OverTime <- scale(CaseStudy_Test$OverTimeBinary)
+
+sample_size <- floor(0.70 * nrow(DDS_Train))
+train_index <- sample(seq_len(nrow(DDS_Train)), size = sample_size)
+train <- DDS_Train[train_index, ]
+test <- DDS_Train[-train_index, ]
+knn.model <- knn(train = train[,5:7], test = test[,5:7], cl = train$Attrition, k=21)
+table(test$Attrition,knn.model)
+#Print confusion matrix for k=17
+CM = confusionMatrix(table(test$Attrition,knn.model))
+#Specificity = .75, Sensitivity = .85, Accuracy = .8429
+CM
+
+#Calculate attrition predictions for the test set!
+CaseStudy_Test$Attrition <- knn(train = train[,5:7], test = CaseStudy_Test[,5:7], cl = train$Attrition, k=21)
+Case2PredictionsAttrition <- CaseStudy_Test %>% select(ID, Attrition)
+write.csv(Case2PredictionsAttrition, "Case2PredictionsLockard Attrition.csv")
+#NaiveBayesModel for 100 iterations
+DDS_Train2 <- DDS_data %>% select(Age, JobLevel, OverTime, Attrition)
+set.seed(150)
+iterations = 100
+masterAcc = matrix(nrow = iterations)
+masterSensitivity = matrix(nrow = iterations)
+masterSpecificity = matrix(nrow = iterations)
+splitPerc = .7
+for(i in 1:iterations)
+{
+  trainIndices = sample(1:dim(DDS_Train2)[1],round(splitPerc * dim(DDS_Train2)[1]))
+  train = DDS_Train2[trainIndices,]
+  test = DDS_Train2[-trainIndices,]
+  
+  model.nb.train <- naiveBayes(Attrition ~ JobLevel + Age + OverTime, data = DDS_Train2)
+  predictions <- predict(model.nb.train, data.frame(JobLevel = test$JobLevel, 
+                                                       Age = test$Age,
+                                                       OverTime = test$OverTime))
+  CM2 = confusionMatrix(table(predictions, test$Attrition))
+  
+  masterAcc[i] = CM2$overall[1]
+  masterSensitivity[i] = CM2$byClass[1]
+  masterSpecificity[i] = CM2$byClass[2]
+  
+}
+MeanAcc = colMeans(masterAcc)
+MeanSensitivity = colMeans(masterSensitivity)
+MeanSpecificity = colMeans(masterSpecificity)  
+#Print average accuracy, sensitivity, and specificity for the Naive Bayes model
+MeanAcc
+MeanSensitivity
+MeanSpecificity
+#Specificity very poor in this model. We will use the kNN model for predictions!
+
+```
+Here, we will create a linear model that predicts Monthly Income (Salary). To find this model, I used forward and stepwise variable selection to determine which parameters were statistically significant. Both forward and stepwise variable selection returned that the significant variables to predict monthly income were: Job level, DistanceFromHome, TotalWorkingYears, and YearsWithCurrManager. The RMSE from this model was 1368.837.
+```{r}
+#Linear Regression Model to predict salary
+#Visualizing Data
+DDS_data %>% ggplot(aes(y = MonthlyIncome, x = TotalWorkingYears, color = TotalWorkingYears)) + geom_point() + ggtitle("Monthly Income vs. Total Working Years")
+DDS_data %>% ggplot(aes(y = MonthlyIncome, x = JobLevel, color = JobLevel)) + geom_point() + ggtitle("Monthly Income vs. Job Level")
+DDS_data %>% ggplot(aes(y = MonthlyIncome, x = TotalWorkingYears, color = JobLevel)) + geom_point() + ggtitle("Monthly Income vs. Total Working Years", "Color coded by Job Level")
+#Slight relationship.... But too much variance as age increases.
+DDS_data %>% ggplot(aes(y = MonthlyIncome, x = Age)) + geom_point() + ggtitle("Monthly Income vs. Age")
+#Create Simple Linear Regression Model
+fit = lm(MonthlyIncome~TotalWorkingYears + JobLevel, data = DDS_data)
+summary(fit)
+fit$coefficients
+#RMSE of 1387.23 for this model
+rmseFit <- sqrt(mean((DDS_data$MonthlyIncome - predict(fit, DDS_data))^2))
+rmseFit
+#Fit model with all numerical predictors for variable selection
+fit2 = lm(MonthlyIncome~ Age + DailyRate + DistanceFromHome + Education 
+          + EnvironmentSatisfaction + HourlyRate +	JobInvolvement +	JobLevel +	JobSatisfaction	+ 
+          	MonthlyRate +	NumCompaniesWorked + PercentSalaryHike +	
+            PerformanceRating + StockOptionLevel +	TotalWorkingYears +	
+            TrainingTimesLastYear +	WorkLifeBalance +	YearsAtCompany+ YearsInCurrentRole + YearsSinceLastPromotion + 
+            YearsWithCurrManager , data = DDS_data)
+summary(fit2)
+
+#Forward Selection
+ols_step_forward_p(fit2, penter = .05, details = TRUE) #Variables Selected: JobLevel, JobRole, TotalWorkingYears, BusinessTravel
+
+#Stepwise Selection. Same Variables selected as Forward Selection
+ols_step_both_p(fit2, pent = .05, prem = .05, details = FALSE)
+StepFitCheck <- DDS_data %>% select(JobLevel, TotalWorkingYears, DistanceFromHome, YearsWithCurrManager, MonthlyIncome)
+StepFitCheck %>% ggpairs() + ggtitle("Plot matrix of Variables Selected by Stepwise & Forward Selection")
+
+stepFit = lm(MonthlyIncome~JobLevel + TotalWorkingYears + DistanceFromHome + YearsWithCurrManager, data = DDS_data)
+summary(stepFit)
+
+#RMSE Calculation using model generated from stepwise selection. 1368, this is less than the simple model!
+stepFit$coefficients
+rmseStepFit <- sqrt(mean((DDS_data$MonthlyIncome - predict(stepFit, DDS_data))^2))
+rmseStepFit
+#Use Cross Validation to check the Linear Model
+TrainObs = sample(seq(1,dim(DDS_data)[1]), round(.75*dim(DDS_data)[1]), replace = FALSE)
+DDSTrain = DDS_data[TrainObs,]
+DDSTest = DDS_data[-TrainObs,]
+
+#Create model using the training set
+stepFitTrain = lm(MonthlyIncome~JobLevel + TotalWorkingYears + DistanceFromHome + YearsWithCurrManager, data = DDSTrain)
+
+#Store Predictions
+stepFitPreds = predict(stepFitTrain, newdata = DDSTest)
+as.data.frame(stepFitPreds)
+#Calculate the MSEs for the predicted values
+MSPE = data.frame(Observed = DDSTest$MonthlyIncome, Predicted = stepFitPreds)
+MSPE$Residual = MSPE$Observed - MSPE$Predicted
+MSPE$SquaredResidual = MSPE$Residual^2
+MSPE
+#Calculate RMSE for the test set. RMSE is 1419.349 Good linear model to continue with predictions for unkown set.
+RMSE = sqrt(mean(MSPE$SquaredResidual))
+RMSE
+
+#Calculate predictions using the no salary data. 
+CaseStudy2No_Salary <- read_excel("/Users/katherinelockard/Downloads/CaseStudy2CompSet No Salary-2.xlsx")
+CaseStudy2No_Salary$MonthlyIncome <- predict(stepFit, newdata = CaseStudy2No_Salary)
+#Write ID with monthly income prediction to CSV
+Case2PredictionsSalary <- CaseStudy2No_Salary %>% select(ID,MonthlyIncome)
+write.csv(Case2PredictionsSalary, file = "Case2PredictionsLockard Salary.csv")
+```
+
